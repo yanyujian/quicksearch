@@ -67,12 +67,12 @@ python -m nuitka ^
     --include-package=pandas ^
     --include-package=openpyxl ^
     --include-data-dir=resources=resources ^
-    --windows-disable-console ^
+    --windows-console-mode=disable ^
     --remove-output ^
     --assume-yes-for-downloads ^
     --static-libpython=no ^
     --disable-ccache ^
-    --lto=yes ^
+    --mingw64 ^
     --output-dir=..\%DIST_DIR% ^
     run.py
 
