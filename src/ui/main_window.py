@@ -3,8 +3,8 @@ from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                            QFileDialog, QMessageBox, QTableWidgetItem, QHeaderView,
                            QMenuBar, QMenu, QInputDialog, QDialog, QLabel,
                            QApplication, QCheckBox, QWidgetAction)
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QClipboard, QFont, QAction
+from PyQt6.QtCore import Qt, QPoint
+from PyQt6.QtGui import QClipboard, QFont, QAction, QPainter, QLinearGradient, QColor, QPalette, QActionGroup
 import pandas as pd
 import os
 import json
@@ -43,6 +43,7 @@ class MainWindow(QMainWindow):
         
         # 初始化类属性
         self.search_inputs = {}
+        self.search_input_used = {}  # 添加一个字典来记录搜索框是否被使用过
         self.excel_handler = ExcelHandler()
         
         # 加载配置
@@ -57,50 +58,151 @@ class MainWindow(QMainWindow):
         default_font = QFont('Microsoft YaHei', self.current_font_size)
         app.setFont(default_font)
         
+        # 设置窗口背景渐变色
+        self.setAutoFillBackground(True)
+        palette = self.palette()
+        gradient = QLinearGradient(0, 0, 0, self.height())
+        gradient.setColorAt(0.0, QColor("#f6f8fa"))
+        gradient.setColorAt(1.0, QColor("#e9ecef"))
+        palette.setBrush(QPalette.ColorRole.Window, gradient)
+        self.setPalette(palette)
+        
         # 设置全局样式
         self.setStyleSheet("""
             QMainWindow {
-                background-color: white;
+                border: none;
             }
             QMenuBar {
-                background-color: #f5f5f5;
-                border-bottom: 1px solid #ddd;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #1a73e8, stop:1 #1557b0);
+                color: white;
+                border: none;
+                padding: 8px;
+                font-size: 13px;
             }
             QMenuBar::item {
-                padding: 5px 10px;
-                background-color: transparent;
+                background: transparent;
+                padding: 8px 12px;
+                border-radius: 6px;
+                margin: 2px;
             }
             QMenuBar::item:selected {
-                background-color: #0078d4;
-                color: white;
+                background: rgba(255, 255, 255, 0.1);
             }
             QMenu {
-                background-color: white;
-                border: 1px solid #ddd;
+                background-color: #ffffff;
+                border: 1px solid #e1e4e8;
+                border-radius: 6px;
+                padding: 5px;
             }
             QMenu::item {
-                padding: 5px 30px 5px 20px;
+                padding: 8px 25px 8px 20px;
+                border-radius: 4px;
+                margin: 2px;
+                color: #24292e;
             }
             QMenu::item:selected {
-                background-color: #0078d4;
-                color: white;
+                background-color: #f1f8ff;
+                color: #1a73e8;
             }
             QTabWidget::pane {
-                border: 1px solid #ddd;
+                border: 1px solid #e1e4e8;
+                border-radius: 8px;
                 background-color: white;
+                margin-top: -1px;
             }
             QTabBar::tab {
-                background-color: #f5f5f5;
-                border: 1px solid #ddd;
-                padding: 5px 10px;
-                min-width: 80px;
+                background: transparent;
+                border: none;
+                padding: 12px 20px;
+                margin: 0 2px;
+                color: #586069;
+                border-top-left-radius: 6px;
+                border-top-right-radius: 6px;
+                font-size: 13px;
             }
             QTabBar::tab:selected {
-                background-color: white;
-                border-bottom: 1px solid white;
+                color: #1a73e8;
+                border-bottom: 2px solid #1a73e8;
+                background-color: rgba(26, 115, 232, 0.1);
             }
-            QWidget {
+            QTabBar::tab:hover:!selected {
+                color: #24292e;
+                background-color: rgba(0, 0, 0, 0.05);
+            }
+            QTableWidget {
                 background-color: white;
+                border: 1px solid #e1e4e8;
+                border-radius: 8px;
+                gridline-color: #f6f8fa;
+                selection-background-color: #f1f8ff;
+            }
+            QTableWidget::item {
+                padding: 12px;
+                border-bottom: 1px solid #f6f8fa;
+            }
+            QTableWidget::item:selected {
+                background-color: #f1f8ff;
+                color: #1a73e8;
+            }
+            QHeaderView::section {
+                background-color: #f6f8fa;
+                color: #24292e;
+                padding: 12px;
+                border: none;
+                border-bottom: 1px solid #e1e4e8;
+                font-weight: bold;
+                font-size: 13px;
+            }
+            QLineEdit {
+                padding: 12px 20px;
+                border: 2px solid #e1e4e8;
+                border-radius: 25px;
+                font-size: 13px;
+                background: white;
+                selection-background-color: #1a73e8;
+            }
+            QLineEdit:focus {
+                border-color: #1a73e8;
+                background: white;
+            }
+            QLineEdit:hover {
+                border-color: #0366d6;
+            }
+            QScrollBar:vertical {
+                border: none;
+                background: #f6f8fa;
+                width: 8px;
+                border-radius: 4px;
+                margin: 0;
+            }
+            QScrollBar::handle:vertical {
+                background: #d1d5da;
+                border-radius: 4px;
+                min-height: 30px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #959da5;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0;
+            }
+            QCheckBox {
+                spacing: 8px;
+                color: #24292e;
+            }
+            QCheckBox::indicator {
+                width: 18px;
+                height: 18px;
+                border-radius: 4px;
+                border: 2px solid #d1d5da;
+            }
+            QCheckBox::indicator:checked {
+                background-color: #1a73e8;
+                border-color: #1a73e8;
+            }
+            QCheckBox::indicator:hover {
+                border-color: #1a73e8;
             }
         """)
         
@@ -143,8 +245,38 @@ class MainWindow(QMainWindow):
         set_path_action.triggered.connect(self.set_excel_path)
         file_menu.addAction(set_path_action)
         
+        # 添加分隔线
+        file_menu.addSeparator()
+        
+        # 添加退出按钮
+        exit_action = QAction('退出', self)
+        exit_action.triggered.connect(self.close)
+        exit_action.setShortcut('Ctrl+Q')
+        file_menu.addAction(exit_action)
+        
         # 窗口菜单
         window_menu = menubar.addMenu('窗口')
+        
+        # 窗口大小预设
+        size_menu = QMenu('窗口大小', self)
+        
+        # 大窗口 (1280x800)
+        large_action = QAction('大', self)
+        large_action.triggered.connect(lambda: self.set_window_size('large'))
+        size_menu.addAction(large_action)
+        
+        # 中等窗口 (1024x768)
+        medium_action = QAction('中', self)
+        medium_action.triggered.connect(lambda: self.set_window_size('medium'))
+        size_menu.addAction(medium_action)
+        
+        # 小窗口 (800x600)
+        small_action = QAction('小', self)
+        small_action.triggered.connect(lambda: self.set_window_size('small'))
+        size_menu.addAction(small_action)
+        
+        window_menu.addMenu(size_menu)
+        window_menu.addSeparator()
         
         # 创建一个QWidget作为菜单项的容器
         top_widget = QWidget()
@@ -169,13 +301,41 @@ class MainWindow(QMainWindow):
         font_size_action.triggered.connect(self.set_font_size)
         settings_menu.addAction(font_size_action)
         
-        # 帮助菜单
-        help_menu = menubar.addMenu('帮助')
+        # 添加分隔线
+        settings_menu.addSeparator()
         
-        # 关于
+        # 复制方式子菜单
+        copy_menu = QMenu('复制方式', self)
+        
+        # 创建动作组，使选项互斥
+        copy_mode_group = QActionGroup(self)
+        copy_mode_group.setExclusive(True)
+        
+        # 单击复制选项
+        self.single_click_action = QAction('单击复制', self)
+        self.single_click_action.setCheckable(True)
+        self.single_click_action.triggered.connect(lambda: self.set_copy_mode(False))
+        copy_mode_group.addAction(self.single_click_action)
+        copy_menu.addAction(self.single_click_action)
+        
+        # 双击复制选项
+        self.double_click_action = QAction('双击复制', self)
+        self.double_click_action.setCheckable(True)
+        self.double_click_action.triggered.connect(lambda: self.set_copy_mode(True))
+        copy_mode_group.addAction(self.double_click_action)
+        copy_menu.addAction(self.double_click_action)
+        
+        # 根据配置设置默认选中状态
+        is_double_click = self.config.get('double_click_copy', False)  # 默认单击
+        self.single_click_action.setChecked(not is_double_click)
+        self.double_click_action.setChecked(is_double_click)
+        
+        settings_menu.addMenu(copy_menu)
+        
+        # 关于按钮（直接添加到菜单栏）
         about_action = QAction('关于', self)
         about_action.triggered.connect(self.show_about)
-        help_menu.addAction(about_action)
+        menubar.addAction(about_action)
         
     def load_config(self):
         """加载配置文件"""
@@ -189,7 +349,8 @@ class MainWindow(QMainWindow):
                 'width': 1024,
                 'height': 768,
                 'is_top': False
-            }
+            },
+            'double_click_copy': False  # 默认为单击复制
         }
         
         try:
@@ -265,8 +426,8 @@ class MainWindow(QMainWindow):
         search_input.setPlaceholderText("输入搜索内容...")
         search_input.textChanged.connect(lambda: self.handle_search(tab_index))
         
-        # 设置搜索框样式
-        search_input.setMinimumHeight(40)  # 增大搜索框高度
+        # 设置光标闪烁
+        search_input.setCursorPosition(0)  # 设置光标位置到开始
         search_input.setStyleSheet("""
             QLineEdit {
                 padding: 5px 10px;
@@ -279,9 +440,20 @@ class MainWindow(QMainWindow):
             }
         """)
         
-        # 当获得焦点时全选文本
-        search_input.focusInEvent = lambda e: search_input.selectAll()
+        # 添加焦点获得事件处理
+        def handle_focus_in(event):
+            if not self.search_input_used.get(tab_index, False):
+                # 如果搜索框未被使用过，只设置焦点
+                search_input.setCursorPosition(0)
+                self.search_input_used[tab_index] = True
+            else:
+                # 如果搜索框被使用过，全选文本
+                search_input.selectAll()
+            
+        search_input.focusInEvent = handle_focus_in
         
+        # 设置搜索框样式
+        search_input.setMinimumHeight(40)
         search_layout.addWidget(search_input)
         return search_layout, search_input
         
@@ -322,15 +494,24 @@ class MainWindow(QMainWindow):
                     gridline-color: #ddd;
                 }
                 QTableWidget::item {
-                    padding: 5px;
+                    padding: 8px;
+                    border-bottom: 1px solid #eee;
+                }
+                QTableWidget::item:selected {
+                    background-color: #0078d4;
+                    color: white;
                 }
                 QHeaderView::section {
                     background-color: #f5f5f5;
-                    padding: 5px;
+                    padding: 8px 5px;
                     border: 1px solid #ddd;
                     font-weight: bold;
+                    font-size: 14px;
                 }
             """)
+            
+            # 允许自动换行
+            table_widget.setWordWrap(True)
             
             # 设置表格列数和固定标题
             table_widget.setColumnCount(2)  # 固定为2列
@@ -373,24 +554,38 @@ class MainWindow(QMainWindow):
                 item = QTableWidgetItem(value)
                 item.setTextAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
                 table_widget.setItem(i, 1, item)
+                
+                # 自动调整行高以适应内容
+                table_widget.resizeRowToContents(i)
             
-            # 设置行高
-            table_widget.verticalHeader().setDefaultSectionSize(40)
+            # 设置最小行高
+            table_widget.verticalHeader().setMinimumSectionSize(40)
             
-            # 添加双击事件
-            table_widget.cellDoubleClicked.connect(
-                lambda row, col: self.handle_cell_double_click(row, col)
-                if col == 1 else None  # 只有提示语列（第二列）支持双击复制
-            )
+            # 添加点击事件
+            if self.config.get('double_click_copy', True):
+                # 双击复制模式
+                table_widget.cellDoubleClicked.connect(
+                    lambda row, col: self.handle_cell_copy(row, col)
+                    if col == 1 else None
+                )
+            else:
+                # 单击复制模式
+                table_widget.cellClicked.connect(
+                    lambda row, col: self.handle_cell_copy(row, col)
+                    if col == 1 else None
+                )
             
             self.tab_widget.addTab(container, sheet_name)
             
     def handle_search(self, tab_index):
         """处理搜索"""
+        # 标记搜索框已被使用
+        self.search_input_used[tab_index] = True
+        
         if tab_index != self.tab_widget.currentIndex():
             return
-            
-        search_text = self.search_inputs[tab_index].text().lower()  # 转换为小写
+        
+        search_text = self.search_inputs[tab_index].text().lower()
         container = self.tab_widget.widget(tab_index)
         table_widget = container.findChild(QTableWidget)
         
@@ -407,30 +602,31 @@ class MainWindow(QMainWindow):
             row_visible = bool(item and search_text in item.text().lower())
             table_widget.setRowHidden(row, not row_visible)
             
-        # 添加搜索结果计数
-        visible_count = sum(1 for row in range(table_widget.rowCount()) 
-                          if not table_widget.isRowHidden(row))
-        self.toast.show_message(f"找到 {visible_count} 条匹配结果")
-        
     def handle_tab_change(self, index):
         """处理标签页切换"""
         if index in self.search_inputs:
             self.search_inputs[index].setFocus()
-            self.search_inputs[index].selectAll()
+            # 只有在搜索框被使用过的情况下才全选文本
+            if self.search_input_used.get(index, False):
+                self.search_inputs[index].selectAll()
             
-    def handle_cell_double_click(self, row, col):
-        """处理单元格双击事件"""
+    def handle_cell_copy(self, row, col):
+        """处理单元格复制事件"""
         current_tab = self.tab_widget.currentWidget()
         table_widget = current_tab.findChild(QTableWidget)
         item = table_widget.item(row, col)
         if item:
+            # 设置选中状态
+            table_widget.setCurrentItem(item)
+            item.setSelected(True)
+            
             # 将文本复制到剪贴板
             clipboard = QApplication.clipboard()
             clipboard.setText(item.text())
             
             # 确保 Toast 显示在最上层
-            self.toast.setParent(None)  # 临时移除父窗口
-            self.toast.setParent(self)  # 重新设置父窗口
+            self.toast.setParent(None)
+            self.toast.setParent(self)
             self.toast.show_message("已复制到剪贴板")
         
     def restore_window_state(self):
@@ -468,7 +664,7 @@ class MainWindow(QMainWindow):
         self.save_window_state()
         
     def resizeEvent(self, event):
-        """窗口大小改变事件"""
+        """窗口大小��变事件"""
         super().resizeEvent(event)
         self.save_window_state()
         
@@ -482,3 +678,43 @@ class MainWindow(QMainWindow):
             self.toast.show_message("取消置顶")
         self.show()
         self.save_window_state()  # 保存置顶状态
+        
+    def set_window_size(self, size):
+        """设置预定义的窗口大小"""
+        # 获取屏幕尺寸
+        screen = QApplication.primaryScreen().geometry()
+        
+        # 预设尺寸（宽x高）
+        sizes = {
+            'large': (1280, 800),
+            'medium': (1024, 768),
+            'small': (800, 600)
+        }
+        
+        if size in sizes:
+            width, height = sizes[size]
+            
+            # 确保窗口不会超出屏幕
+            width = min(width, screen.width())
+            height = min(height, screen.height())
+            
+            # 计算居中位置
+            x = (screen.width() - width) // 2
+            y = (screen.height() - height) // 2
+            
+            # 设置窗口大小和位置
+            self.setGeometry(x, y, width, height)
+            
+            # 保存配置
+            self.save_window_state()
+            
+            # 显示提示
+            self.toast.show_message(f"已调整为{size}窗口")
+        
+    def set_copy_mode(self, is_double_click):
+        """设置复制模式"""
+        self.config['double_click_copy'] = is_double_click
+        self.save_config()
+        self.update_tabs()  # 重新创建表格以更新事件绑定
+        mode_text = "双击" if is_double_click else "单击"
+        self.toast.show_message(f"已切换为{mode_text}复制模式")

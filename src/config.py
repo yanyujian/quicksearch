@@ -5,8 +5,8 @@ BASE_DIR = Path(__file__).parent.parent
 DATA_DIR = BASE_DIR / "data"
 
 # 用户认证配置
-DEFAULT_USERNAME = "admin"
-DEFAULT_PASSWORD = "admin123"
+DEFAULT_USERNAME = "hy"
+DEFAULT_PASSWORD = "hy1235"
 
 # Excel配置
 EXCEL_FILE = DATA_DIR / "data.xlsx"
