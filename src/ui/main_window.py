@@ -2,13 +2,14 @@ from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                            QTabWidget, QTableWidget, QLineEdit, QPushButton,
                            QFileDialog, QMessageBox, QTableWidgetItem, QHeaderView,
                            QMenuBar, QMenu, QInputDialog, QDialog, QLabel,
-                           QApplication)
+                           QApplication, QCheckBox, QWidgetAction)
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QClipboard, QFont, QAction
 import pandas as pd
 import os
 import json
 from src.utils.excel_handler import ExcelHandler
+from src.ui.toast import Toast  # 添加导入
 
 class AboutDialog(QDialog):
     def __init__(self, parent=None):
@@ -18,17 +19,17 @@ class AboutDialog(QDialog):
         
         layout = QVBoxLayout()
         
-        # 添加作者信息
+        # 添加作者信息，使用HTML格式使邮箱可点击
         info_text = """
         <h2>Excel智能检索系统</h2>
-        <p><b>作者：</b>冯自立</p>
+        <p><b>作者：</b>黄迎老公</p>
         <p><b>联系方式：</b></p>
-        <p>邮箱：183722847@qq.com</p>
+        <p>邮箱：<a href="mailto:183722847@qq.com">183722847@qq.com</a></p>
         <p>微信：fzlzili</p>
         """
         
         info_label = QLabel(info_text)
-        info_label.setOpenExternalLinks(True)
+        info_label.setOpenExternalLinks(True)  # 允许打开外部链接
         info_label.setTextFormat(Qt.TextFormat.RichText)
         info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
@@ -39,7 +40,6 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Excel智能检索系统")
-        self.setMinimumSize(1024, 768)
         
         # 初始化类属性
         self.search_inputs = {}
@@ -48,14 +48,70 @@ class MainWindow(QMainWindow):
         # 加载配置
         self.config = self.load_config()
         
-        # 设置全局字体
+        # 设置窗口最小尺寸，保持16:9的比例
+        self.setMinimumSize(300, int(300 * 9/16))
+        
+        # 设置全局字体和样式
         app = QApplication.instance()
         self.current_font_size = self.config.get('font_size', 12)
         default_font = QFont('Microsoft YaHei', self.current_font_size)
         app.setFont(default_font)
         
-        # 创建菜单栏
+        # 设置全局样式
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: white;
+            }
+            QMenuBar {
+                background-color: #f5f5f5;
+                border-bottom: 1px solid #ddd;
+            }
+            QMenuBar::item {
+                padding: 5px 10px;
+                background-color: transparent;
+            }
+            QMenuBar::item:selected {
+                background-color: #0078d4;
+                color: white;
+            }
+            QMenu {
+                background-color: white;
+                border: 1px solid #ddd;
+            }
+            QMenu::item {
+                padding: 5px 30px 5px 20px;
+            }
+            QMenu::item:selected {
+                background-color: #0078d4;
+                color: white;
+            }
+            QTabWidget::pane {
+                border: 1px solid #ddd;
+                background-color: white;
+            }
+            QTabBar::tab {
+                background-color: #f5f5f5;
+                border: 1px solid #ddd;
+                padding: 5px 10px;
+                min-width: 80px;
+            }
+            QTabBar::tab:selected {
+                background-color: white;
+                border-bottom: 1px solid white;
+            }
+            QWidget {
+                background-color: white;
+            }
+        """)
+        
+        # 初始化Toast（移到最前面）
+        self.toast = Toast(self)
+        
+        # 创建菜单栏（包含 top_checkbox）
         self.create_menu_bar()
+        
+        # 从配置文件恢复窗口状态
+        self.restore_window_state()
         
         # 创建中央窗口部件
         central_widget = QWidget()
@@ -87,6 +143,24 @@ class MainWindow(QMainWindow):
         set_path_action.triggered.connect(self.set_excel_path)
         file_menu.addAction(set_path_action)
         
+        # 窗口菜单
+        window_menu = menubar.addMenu('窗口')
+        
+        # 创建一个QWidget作为菜单项的容器
+        top_widget = QWidget()
+        top_layout = QHBoxLayout(top_widget)
+        top_layout.setContentsMargins(10, 2, 10, 2)
+        
+        # 创建复选框
+        self.top_checkbox = QCheckBox("窗口置顶")
+        self.top_checkbox.stateChanged.connect(self.toggle_window_top)
+        top_layout.addWidget(self.top_checkbox)
+        
+        # 创建QWidgetAction
+        top_action = QWidgetAction(self)
+        top_action.setDefaultWidget(top_widget)
+        window_menu.addAction(top_action)
+        
         # 设置菜单
         settings_menu = menubar.addMenu('设置')
         
@@ -108,7 +182,14 @@ class MainWindow(QMainWindow):
         config_path = 'config.json'
         default_config = {
             'excel_path': os.path.join('data', 'data.xlsx'),
-            'font_size': 12
+            'font_size': 12,
+            'window': {
+                'pos_x': 100,
+                'pos_y': 100,
+                'width': 1024,
+                'height': 768,
+                'is_top': False
+            }
         }
         
         try:
@@ -147,10 +228,10 @@ class MainWindow(QMainWindow):
         size, ok = QInputDialog.getInt(
             self, 
             "设置字体大小",
-            "请输入字体大小(8-20):",
+            "请输入字体大小(8-50):",
             value=self.current_font_size,
             min=8,
-            max=20
+            max=50
         )
         
         if ok:
@@ -162,6 +243,15 @@ class MainWindow(QMainWindow):
             app = QApplication.instance()
             new_font = QFont('Microsoft YaHei', size)
             app.setFont(new_font)
+            
+            # 刷新所有标签页
+            self.update_tabs()
+            
+            # 刷新菜单栏
+            self.menuBar().setFont(new_font)
+            
+            # 显示提示
+            self.toast.show_message("字体大小已更新")
             
     def show_about(self):
         """显示关于对话框"""
@@ -243,30 +333,46 @@ class MainWindow(QMainWindow):
             """)
             
             # 设置表格列数和固定标题
-            column_count = len(df.columns)
-            table_widget.setColumnCount(column_count)
+            table_widget.setColumnCount(2)  # 固定为2列
+            table_widget.setHorizontalHeaderLabels(['标签', '提示语'])
             
-            # 设置固定的列标题
-            headers = ['标签', '提示语']
-            if column_count > 2:
-                # 如果有更多列，使用默认的列号作为标题
-                headers.extend([f'列 {i+1}' for i in range(2, column_count)])
-            table_widget.setHorizontalHeaderLabels(headers)
+            # 设置表头样式
+            header = table_widget.horizontalHeader()
+            header.setStyleSheet("""
+                QHeaderView::section {
+                    background-color: #f5f5f5;
+                    padding: 8px 5px;
+                    border: 1px solid #ddd;
+                    font-weight: bold;
+                    font-size: 14px;
+                }
+            """)
             
             # 设置列宽
-            header = table_widget.horizontalHeader()
             header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)  # 标签列
             header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)  # 提示语列
-            for i in range(2, column_count):
-                header.setSectionResizeMode(i, QHeaderView.ResizeMode.ResizeToContents)
             
-            # 填充数据
+            # 填充数据（添加容错处理）
             table_widget.setRowCount(len(df))
             for i, row in df.iterrows():
-                for j, value in enumerate(row):
-                    item = QTableWidgetItem(str(value))
-                    item.setTextAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
-                    table_widget.setItem(i, j, item)
+                # 处理第一列（标签）
+                if len(df.columns) > 0:
+                    value = str(row.iloc[0]) if not pd.isna(row.iloc[0]) else ""
+                    item = QTableWidgetItem(value)
+                else:
+                    item = QTableWidgetItem("")
+                item.setTextAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+                table_widget.setItem(i, 0, item)
+                
+                # 处理第二列（提示语）
+                if len(df.columns) > 1:
+                    value = str(row.iloc[1]) if not pd.isna(row.iloc[1]) else ""
+                else:
+                    # 如果只有一列，将第一列的内容作为提示语
+                    value = str(row.iloc[0]) if not pd.isna(row.iloc[0]) else ""
+                item = QTableWidgetItem(value)
+                item.setTextAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+                table_widget.setItem(i, 1, item)
             
             # 设置行高
             table_widget.verticalHeader().setDefaultSectionSize(40)
@@ -284,7 +390,7 @@ class MainWindow(QMainWindow):
         if tab_index != self.tab_widget.currentIndex():
             return
             
-        search_text = self.search_inputs[tab_index].text()
+        search_text = self.search_inputs[tab_index].text().lower()  # 转换为小写
         container = self.tab_widget.widget(tab_index)
         table_widget = container.findChild(QTableWidget)
         
@@ -296,14 +402,16 @@ class MainWindow(QMainWindow):
             
         # 在当前标签页中搜索
         for row in range(table_widget.rowCount()):
-            row_visible = False
-            for col in range(table_widget.columnCount()):
-                item = table_widget.item(row, col)
-                if item and search_text.lower() in item.text().lower():
-                    row_visible = True
-                    break
+            # 只检查第一列（标签）
+            item = table_widget.item(row, 0)
+            row_visible = bool(item and search_text in item.text().lower())
             table_widget.setRowHidden(row, not row_visible)
             
+        # 添加搜索结果计数
+        visible_count = sum(1 for row in range(table_widget.rowCount()) 
+                          if not table_widget.isRowHidden(row))
+        self.toast.show_message(f"找到 {visible_count} 条匹配结果")
+        
     def handle_tab_change(self, index):
         """处理标签页切换"""
         if index in self.search_inputs:
@@ -319,5 +427,58 @@ class MainWindow(QMainWindow):
             # 将文本复制到剪贴板
             clipboard = QApplication.clipboard()
             clipboard.setText(item.text())
-            # 可选：显示提示
-            QMessageBox.information(self, "提示", "文本已复制到剪贴板！")
+            
+            # 确保 Toast 显示在最上层
+            self.toast.setParent(None)  # 临时移除父窗口
+            self.toast.setParent(self)  # 重新设置父窗口
+            self.toast.show_message("已复制到剪贴板")
+        
+    def restore_window_state(self):
+        """恢复窗口状态"""
+        window_config = self.config.get('window', {})
+        
+        # 恢复窗口位置和大小
+        x = window_config.get('pos_x', 100)
+        y = window_config.get('pos_y', 100)
+        width = window_config.get('width', 1024)
+        height = window_config.get('height', 768)
+        
+        self.setGeometry(x, y, width, height)
+        
+        # 恢复置顶状态
+        is_top = window_config.get('is_top', False)
+        if is_top:
+            self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+            self.top_checkbox.setChecked(True)
+            
+    def save_window_state(self):
+        """保存窗口状态"""
+        self.config['window'] = {
+            'pos_x': self.x(),
+            'pos_y': self.y(),
+            'width': self.width(),
+            'height': self.height(),
+            'is_top': self.top_checkbox.isChecked()
+        }
+        self.save_config()
+        
+    def moveEvent(self, event):
+        """窗口移动事件"""
+        super().moveEvent(event)
+        self.save_window_state()
+        
+    def resizeEvent(self, event):
+        """窗口大小改变事件"""
+        super().resizeEvent(event)
+        self.save_window_state()
+        
+    def toggle_window_top(self, state):
+        """切换窗口置顶状态"""
+        if state == Qt.CheckState.Checked.value:
+            self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+            self.toast.show_message("窗口已置顶")
+        else:
+            self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowStaysOnTopHint)
+            self.toast.show_message("取消置顶")
+        self.show()
+        self.save_window_state()  # 保存置顶状态

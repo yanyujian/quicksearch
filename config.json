@@ -1,4 +1,11 @@
 {
     "excel_path": "D:/develop/quicksearch/data/data.xlsx",
-    "font_size": 12
+    "font_size": 12,
+    "window": {
+        "pos_x": 741,
+        "pos_y": 470,
+        "width": 963,
+        "height": 491,
+        "is_top": true
+    }
 }
